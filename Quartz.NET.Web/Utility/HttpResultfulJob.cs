@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Quartz;
 using Quartz.Impl;
 using Quartz.Impl.Triggers;
@@ -29,16 +29,20 @@ namespace Quartz.NET.Web.Utility
             DateTime dateTime = DateTime.Now;
             TaskOptions taskOptions = context.GetTaskOptions();
             string httpMessage = "";
-            AbstractTrigger trigger = (context as JobExecutionContextImpl).Trigger as AbstractTrigger;
+
             if (taskOptions == null)
             {
-                FileHelper.WriteFile(FileQuartz.LogPath + trigger.Group, $"{trigger.Name}.txt", "未到找作业或可能被移除", true);
+                var rawTrigger = context.Trigger;
+                string group = rawTrigger?.Key.Group ?? "UnknownGroup";
+                string name = rawTrigger?.Key.Name ?? "UnknownTask";
+                FileHelper.WriteFile(FileQuartz.LogPath + group, $"{name}.txt", "未到找作业或可能被移除", true);
                 return;
             }
+
             Console.WriteLine($"作业[{taskOptions.TaskName}]开始:{ DateTime.Now.ToString("yyyy-MM-dd HH:mm:sss")}");
             if (string.IsNullOrEmpty(taskOptions.ApiUrl) || taskOptions.ApiUrl == "/")
             {
-                FileHelper.WriteFile(FileQuartz.LogPath + trigger.Group, $"{trigger.Name}.txt", $"{ DateTime.Now.ToString("yyyy-MM-dd HH:mm:sss")}未配置url,", true);
+                FileHelper.WriteFile(FileQuartz.LogPath + taskOptions.GroupName + "\\", $"{taskOptions.TaskName}.txt", $"{ DateTime.Now.ToString("yyyy-MM-dd HH:mm:sss")}未配置url,", true);
                 return;
             }
 
@@ -63,13 +67,15 @@ namespace Quartz.NET.Web.Utility
 
             try
             {
-                string logContent = $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}_{dateTime.ToString("yyyy-MM-dd HH:mm:ss")}_{(string.IsNullOrEmpty(httpMessage) ? "OK" : httpMessage)}\r\n";
+                string msg = string.IsNullOrEmpty(httpMessage) ? "OK" : httpMessage.Replace("\r\n", " ").Replace("\r", " ").Replace("\n", " ");
+                string logContent = $"{dateTime.ToString("yyyy-MM-dd HH:mm:ss")}_{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}_{msg}\r\n";
                 FileHelper.WriteFile(FileQuartz.LogPath + taskOptions.GroupName + "\\", $"{taskOptions.TaskName}.txt", logContent, true);
             }
             catch (Exception)
             {
             }
-            Console.WriteLine(trigger.FullName + " " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:sss") + " " + httpMessage);
+
+            Console.WriteLine($"{taskOptions.GroupName}.{taskOptions.TaskName} {DateTime.Now.ToString("yyyy-MM-dd HH:mm:sss")} {httpMessage}");
             return;
         }
     }

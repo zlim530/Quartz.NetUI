@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
@@ -61,6 +61,18 @@ namespace Quartz.NET.Web.Extensions
             string content = $"成功:{   _taskList.Count - errorCount}个,失败{errorCount}个,异常：{errorMsg}\r\n";
             FileQuartz.WriteStartLog(content);
 
+            try
+            {
+                var scheduler = _schedulerFactory.GetScheduler().GetAwaiter().GetResult();
+                if (!scheduler.IsStarted)
+                {
+                    scheduler.Start().GetAwaiter().GetResult();
+                }
+            }
+            catch (Exception ex)
+            {
+                FileQuartz.WriteStartLog($"启动调度器异常：{ex.Message}\r\n");
+            }
 
             return applicationBuilder;
         }
@@ -89,20 +101,24 @@ namespace Quartz.NET.Web.Extensions
                         var triggers = await _scheduler.GetTriggersOfJob(jobKey);
                         foreach (ITrigger trigger in triggers)
                         {
+                            DateTime? lastRunTime = null;
                             DateTimeOffset? dateTimeOffset = trigger.GetPreviousFireTimeUtc();
                             if (dateTimeOffset != null)
                             {
-                                taskOptions.LastRunTime = Convert.ToDateTime(dateTimeOffset.ToString());
+                                lastRunTime = dateTimeOffset.Value.LocalDateTime;
                             }
-                            else
+                            var runlog = FileQuartz.GetJobRunLog(taskOptions.TaskName, taskOptions.GroupName, 1, 2);
+                            if (runlog.Count > 0)
                             {
-                                var runlog = FileQuartz.GetJobRunLog(taskOptions.TaskName, taskOptions.GroupName, 1, 2);
-                                if (runlog.Count > 0)
+                                if (DateTime.TryParse(runlog[0].BeginDate, out DateTime logRunTime))
                                 {
-                                    DateTime.TryParse(runlog[0].BeginDate, out DateTime lastRunTime);
-                                    taskOptions.LastRunTime = lastRunTime;
+                                    if (lastRunTime == null || logRunTime > lastRunTime)
+                                    {
+                                        lastRunTime = logRunTime;
+                                    }
                                 }
                             }
+                            taskOptions.LastRunTime = lastRunTime;
                         }
                         list.Add(taskOptions);
                     }
@@ -337,13 +353,15 @@ namespace Quartz.NET.Web.Extensions
                 {
                     case JobAction.删除:
                     case JobAction.修改:
-                    case JobAction.暂停:
                         await scheduler.PauseTrigger(trigger.Key);
                         await scheduler.UnscheduleJob(trigger.Key);// 移除触发器
                         await scheduler.DeleteJob(trigger.JobKey);
                         result = taskOptions.ModifyTaskEntity(schedulerFactory, action);
                         break;
-                
+                    case JobAction.暂停:
+                        await scheduler.PauseTrigger(trigger.Key);
+                        result = taskOptions.ModifyTaskEntity(schedulerFactory, action);
+                        break;
                     case JobAction.停止:
                     case JobAction.开启:
                         result = taskOptions.ModifyTaskEntity(schedulerFactory, action);
@@ -351,11 +369,23 @@ namespace Quartz.NET.Web.Extensions
                         {
                             await scheduler.ResumeTrigger(trigger.Key);
                             //   await scheduler.RescheduleJob(trigger.Key, trigger);
+                            if (!scheduler.IsStarted)
+                            {
+                                await scheduler.Start();
+                            }
                         }
                         else
                         {
                             await scheduler.Shutdown();
                         }
+                        break;
+                    case JobAction.立即执行:
+                        result = taskOptions.ModifyTaskEntity(schedulerFactory, action);
+                        if (!scheduler.IsStarted)
+                        {
+                            await scheduler.Start();
+                        }
+                        await scheduler.TriggerJob(jobKey);
                         break;
                 }
                 return result ?? new { status = true, msg = $"作业{action.ToString()}成功" };
@@ -371,16 +401,17 @@ namespace Quartz.NET.Web.Extensions
             }
         }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="context"></param>通过作业上下文获取作业对应的配置参数
-        /// <returns></returns>
         public static TaskOptions GetTaskOptions(this IJobExecutionContext context)
         {
-            AbstractTrigger trigger = (context as JobExecutionContextImpl).Trigger as AbstractTrigger;
-            TaskOptions taskOptions = _taskList.Where(x => x.TaskName == trigger.Name && x.GroupName == trigger.Group).FirstOrDefault();
-            return taskOptions ?? _taskList.Where(x => x.TaskName == trigger.JobName && x.GroupName == trigger.JobGroup).FirstOrDefault();
+            var trigger = context.Trigger;
+            if (trigger == null) return null;
+            var taskOptions = _taskList.FirstOrDefault(x => x.TaskName == trigger.Key.Name && x.GroupName == trigger.Key.Group);
+            if (taskOptions != null) return taskOptions;
+            if (trigger.JobKey != null)
+            {
+                taskOptions = _taskList.FirstOrDefault(x => x.TaskName == trigger.JobKey.Name && x.GroupName == trigger.JobKey.Group);
+            }
+            return taskOptions;
         }
 
         /// <summary>
