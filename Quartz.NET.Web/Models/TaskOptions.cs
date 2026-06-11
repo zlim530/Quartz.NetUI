@@ -14,5 +14,6 @@ namespace Quartz.NET.Web.Models
         public string RequestType { get; set; }
         public DateTime? LastRunTime { get; set; }
         public int Status { get; set; }
+        public string RequestBody { get; set; }
     }
 }

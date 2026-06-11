@@ -58,7 +58,8 @@ namespace Quartz.NET.Web.Utility
                 httpMessage = await httpClientFactory.HttpSendAsync(
                     taskOptions.RequestType?.ToLower() == "get" ? HttpMethod.Get : HttpMethod.Post,
                     taskOptions.ApiUrl,
-                    header);
+                    header,
+                    taskOptions.RequestBody);
             }
             catch (Exception ex)
             {

@@ -34,7 +34,7 @@
            class-name="vertical-center-modal">
         <div class="model-content">
             <i-form ref="formValidate" :label-width="120" v-bind:model="taskValidate" v-bind:rules="ruleValidate">
-                <form-item v-for="item in taskForm" v-bind:label="item.text+'：'" v-bind:prop="item.name">
+                <form-item v-for="item in taskForm" v-if="item.show !== false" v-bind:label="item.text+'：'" v-bind:prop="item.name">
                     <label v-if="item.readonly">{{taskValidate[item.name]}}</label>
                     <i-input v-else-if="item.type=='textarea'" v-model="taskValidate[item.name]" type="textarea"></i-input>
                     <i-select v-else-if="item.type=='select'" @@on-change="onChange(item,taskValidate[item.name])" v-model="taskValidate[item.name]" style="width:378px">

@@ -29,7 +29,7 @@ var $taskVue = new Vue({
         activedIndex: 0,
         taskValidate: {
             taskName: '', groupName: '', interval: '', apiUrl: '', authKey: '', authValue:
-                '', describe: '', requestType: ''
+                '', describe: '', requestType: 'post', requestBody: ''
         },
         ruleValidate: {
             taskName: [{ required: true, message: '作业名称必填', trigger: 'blur' }],
@@ -46,9 +46,15 @@ var $taskVue = new Vue({
             { name: 'authKey', text: 'header(key)', value: '', placeholder: '请求header验证的Key' },
             { name: 'authValue', text: 'header(value)', value: '', placeholder: '请求header验证的Key' },
             {
-                name: 'requestType', text: '请求方式', value: '', onChange: (data, value) => {
+                name: 'requestType', text: '请求方式', value: '', onChange: (value, item) => {
+                    this.taskForm.forEach(function (formItem) {
+                        if (formItem.name === 'requestBody') {
+                            formItem.show = value === 'post';
+                        }
+                    });
                 }, placeholder: 'post/get', type: 'select'
             },
+            { name: 'requestBody', text: '请求Body', value: '', show: true, type: 'textarea', placeholder: 'POST请求的JSON参数，如 {"ToolName":"xxx","Arguments":{},"TargetRoom":"xxx"}' },
             { name: 'describe', text: '描述', value: '', type: 'textarea' }
         ],
         columns: [
@@ -246,6 +252,9 @@ var $taskVue = new Vue({
             for (var key in this.taskValidate) {
                 this.taskValidate[key] = '';
             }
+            this.taskForm.forEach(function (item) {
+                item.show = true;
+            });
             this.setFormClass(false);
             this.model = true;
         },
@@ -270,6 +279,13 @@ var $taskVue = new Vue({
                 this.taskValidate[key] = this.select.rows[0][key];
             }
             this.setFormClass(true);
+            // sync requestBody show based on loaded requestType
+            var loadedRequestType = this.taskValidate.requestType;
+            this.taskForm.forEach(function (formItem) {
+                if (formItem.name === 'requestBody') {
+                    formItem.show = loadedRequestType === 'post';
+                }
+            });
             //this.taskForm[0]
         },
         refresh: function (_init) {
